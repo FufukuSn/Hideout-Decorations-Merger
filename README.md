@@ -9,7 +9,7 @@ Open the HTML file in any modern browser (tested chromium, firefox, Internet exp
 
 ## Screenshots
 
----
+
 
 ## How to use
 
@@ -21,7 +21,7 @@ Open the HTML file in any modern browser (tested chromium, firefox, Internet exp
   - **Append** — keep the target's own doodads and add the source set on top.
 - **Offset preview** — inspect the first 40 doodads (source x/y → new x/y → offset from Waypoint) before downloading.
 
----
+
 
 ## Usage
 
@@ -32,7 +32,7 @@ Open the HTML file in any modern browser (tested chromium, firefox, Internet exp
 5. Click **Preview offsets** to sanity-check, then **Merge & download**.
 6. The downloaded file is named `merged_<targetname>.hideout`.
 
----
+
 
 ## How it works (technical)
 
@@ -60,7 +60,7 @@ The Waypoint itself is written from the **target** file verbatim.
 
 Only `x` and `y` are modified on import. `hash`, `r`, and `fv` are preserved.
 
----
+
 
 ## File format notes
 
@@ -78,14 +78,14 @@ Only `x` and `y` are modified on import. `hash`, `r`, and `fv` are preserved.
 
 The `doodads` object may legitimately contain **repeated keys** for decorations placed multiple times. This tool is built specifically to handle that.
 
----
+
 
 
 ## License
 
 Licensed under the **GNU General Public License v3.0**. See [`LICENSE`](LICENSE) for the full text.
 
----
+
 
 ## Disclaimer
 
