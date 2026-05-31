@@ -80,16 +80,6 @@ The `doodads` object may legitimately contain **repeated keys** for decorations 
 
 ---
 
-## Project structure
-
-```
-.
-├── index.html        # the entire tool (HTML + CSS + JS, no dependencies)
-├── LICENSE           # GNU GPL v3.0
-└── README.md         # this file
-```
-
----
 
 ## License
 
