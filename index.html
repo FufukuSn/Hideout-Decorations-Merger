@@ -100,7 +100,17 @@
 
   <div class="opt">
     <input type="checkbox" id="keepTarget">
-    <label for="keepTarget">Also keep the target file's own doodads (append source doodads instead of replacing). Target Waypoint is never duplicated.</label>
+    <label for="keepTarget">Also keep the target file's own decorations (append source decorations instead of replacing).</label>
+  </div>
+
+  <div class="opt">
+    <input type="checkbox" id="recenter">
+    <label for="recenter">Recenter clusters near the Waypoint (compact far-away groups so they stay in bounds). Doodads within 5 units chain into one cluster.</label>
+  </div>
+  <div class="opt" id="radiusRow" style="margin-left:26px;display:none">
+    <label for="maxDist">Max distance from Waypoint:</label>
+    <input type="number" id="maxDist" value="175" min="10" max="100000" style="width:90px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:5px 8px">
+    <span class="pill">units (per axis)</span>
   </div>
 
   <div class="row">
@@ -111,7 +121,7 @@
   <div class="status" id="status"></div>
 
   <details id="previewWrap" style="display:none">
-    <summary>Offset preview (first 40 doodads)</summary>
+    <summary>Offset preview (first 40 decorations)</summary>
     <div id="previewBody"></div>
   </details>
 
@@ -204,8 +214,17 @@ function numVal(objNode,key){
 
 const state={src:null,tgt:null,srcName:'',tgtName:''};
 
+// The Waypoint always has this hash regardless of game language, so we match by
+// hash first (works for "Waypoint", "\u041f\u043e\u0440\u0442\u0430\u043b", etc.).
+// Fall back to the English name only if the hash isn't present.
+const WAYPOINT_HASH = 1224707366;
 function findWaypoint(doodadsObj){
-  // doodadsObj is t:'obj' with members [name, attrObj]; find member whose key is "Waypoint"
+  for(const [k,v] of doodadsObj.members){
+    if(v && v.t==='obj'){
+      const h=getMember(v,'hash');
+      if(h && Number(h.v)===WAYPOINT_HASH) return v;
+    }
+  }
   for(const [k,v] of doodadsObj.members){
     if(k==='Waypoint') return v;
   }
@@ -251,46 +270,116 @@ function readFile(file, which){
   reader.readAsText(file);
 }
 
+// ----- Cluster detection -----
+// Two doodads are "linked" if they're within CLUSTER_DIST of each other (per
+// Chebyshev distance). Linked doodads form one rigid artistic group.
+const CLUSTER_DIST = 5;
+function detectClusters(items){
+  // items: [{x,y, idx}]; returns array of clusters, each an array of item indices
+  const n=items.length;
+  const parent=Array.from({length:n},(_,i)=>i);
+  const find=a=>{ while(parent[a]!==a){ parent[a]=parent[parent[a]]; a=parent[a]; } return a; };
+  const union=(a,b)=>{ parent[find(a)]=find(b); };
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){
+    if(Math.abs(items[i].x-items[j].x)<=CLUSTER_DIST &&
+       Math.abs(items[i].y-items[j].y)<=CLUSTER_DIST) union(i,j);
+  }
+  const groups=new Map();
+  for(let i=0;i<n;i++){ const r=find(i); if(!groups.has(r)) groups.set(r,[]); groups.get(r).push(i); }
+  return [...groups.values()];
+}
+
 function buildMerge(){
   const src=state.src, tgt=state.tgt;
-  const dx = tgt.wpx - src.wpx;
+  const dx = tgt.wpx - src.wpx;   // base Waypoint-pinned translation
   const dy = tgt.wpy - src.wpy;
 
-  // Build new doodads object node
   const out={t:'obj',members:[]};
 
   if(keepTarget.checked){
-    // start with target's own doodads (these keep their original coords)
     for(const [name,attr] of tgt.doodads.members){
-      out.members.push([name, attr]); // verbatim
+      out.members.push([name, attr]); // target's own doodads kept verbatim
     }
   }
 
-  // import source doodads, re-anchored
+  // Target Waypoint name (output stays in target's language)
+  let tgtWpName='Waypoint';
+  for(const [k,v] of tgt.doodads.members){
+    if(v && v.t==='obj'){ const h=getMember(v,'hash'); if(h && Number(h.v)===WAYPOINT_HASH){ tgtWpName=k; break; } }
+  }
+
+  // Collect importable source doodads (everything except the Waypoint)
+  const imp=[]; // {name, attr, x, y}
+  let srcWaypointSeen=false;
   for(const [name,attr] of src.doodads.members){
-    if(name==='Waypoint'){
-      if(keepTarget.checked){
-        // target Waypoint already present; skip source waypoint
-        continue;
-      } else {
-        // use target's waypoint verbatim so it stays fixed
-        out.members.push([name, tgt.wp]);
-        continue;
-      }
-    }
-    // clone attr object, offset x/y
-    const newAttr={t:'obj',members:attr.members.map(([k,v])=>{
-      if(k==='x') return [k,{t:'num',v:String(Number(v.v)+dx)}];
-      if(k==='y') return [k,{t:'num',v:String(Number(v.v)+dy)}];
+    const hm = attr && attr.t==='obj' ? getMember(attr,'hash') : null;
+    if(hm && Number(hm.v)===WAYPOINT_HASH){ srcWaypointSeen=true; continue; }
+    imp.push({name, attr, x:numVal(attr,'x'), y:numVal(attr,'y')});
+  }
+
+  // Per-doodad extra translation from recentering (default 0,0 => current behavior)
+  const extra = imp.map(()=>({ex:0, ey:0}));
+  let recenterInfo = {applied:false, scale:1, clusters:imp.length?1:0, maxBefore:0};
+
+  if(recenter.checked && imp.length){
+    const maxDist = Math.max(1, Number(maxDist_el().value) || 175);
+    const clusters = detectClusters(imp);
+    recenterInfo.clusters = clusters.length;
+
+    // Each cluster's center, and its vector from the SOURCE waypoint.
+    const centers = clusters.map(idxs=>{
+      let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
+      for(const i of idxs){ const it=imp[i];
+        if(it.x<minx)minx=it.x; if(it.x>maxx)maxx=it.x;
+        if(it.y<miny)miny=it.y; if(it.y>maxy)maxy=it.y; }
+      return {cx:(minx+maxx)/2, cy:(miny+maxy)/2};
+    });
+    // Cluster-center vectors from source waypoint
+    const vecs = centers.map(c=>({vx:c.cx-src.wpx, vy:c.cy-src.wpy}));
+    const maxV = Math.max(0, ...vecs.map(v=>Math.max(Math.abs(v.vx),Math.abs(v.vy))));
+    recenterInfo.maxBefore = maxV;
+
+    // Only compact if the farthest cluster center exceeds the safe radius.
+    const scale = (maxV>maxDist) ? (maxDist/maxV) : 1;
+    recenterInfo.scale = scale;
+    recenterInfo.applied = scale<1;
+
+    // For each cluster, move its CENTER to scaled position; doodads keep their
+    // exact offset to the cluster center (rigid => internal geometry preserved).
+    clusters.forEach((idxs, ci)=>{
+      const v=vecs[ci];
+      // new center offset from source waypoint after scaling
+      const ncx = src.wpx + v.vx*scale;
+      const ncy = src.wpy + v.vy*scale;
+      // shift = (scaled center) - (original center)
+      const shx = ncx - centers[ci].cx;
+      const shy = ncy - centers[ci].cy;
+      for(const i of idxs){ extra[i].ex = shx; extra[i].ey = shy; }
+    });
+  }
+
+  // Place the (fixed) target Waypoint, preserving source order position
+  if(!keepTarget.checked && srcWaypointSeen){
+    out.members.push([tgtWpName, tgt.wp]);
+  }
+
+  // Emit imported doodads with base translation + recenter extra
+  imp.forEach((it,i)=>{
+    const tx = dx + extra[i].ex;
+    const ty = dy + extra[i].ey;
+    const newAttr={t:'obj',members:it.attr.members.map(([k,v])=>{
+      if(k==='x') return [k,{t:'num',v:String(Math.round(Number(v.v)+tx))}];
+      if(k==='y') return [k,{t:'num',v:String(Math.round(Number(v.v)+ty))}];
       return [k,v];
     })};
-    out.members.push([name,newAttr]);
-  }
+    out.members.push([it.name,newAttr]);
+  });
 
-  // Build full output from TARGET metadata, replacing doodads
   const root={t:'obj',members: tgt.ast.members.map(([k,v])=> k==='doodads'? [k,out] : [k,v])};
-  return {root,dx,dy,total:out.members.length};
+  return {root,dx,dy,total:out.members.length, recenterInfo};
 }
+
+function maxDist_el(){ return document.getElementById('maxDist'); }
 
 function setStatus(kind,msg){
   if(!msg){ status.className='status'; status.innerHTML=''; return; }
@@ -302,9 +391,19 @@ function refreshButtons(){
   goBtn.disabled=!ready; previewBtn.disabled=!ready;
 }
 
+function recenterMsg(ri){
+  if(!ri) return '';
+  if(!recenter.checked) return '';
+  if(ri.applied){
+    return ' Recenter ON: '+ri.clusters+' cluster(s) compacted by &times;'+ri.scale.toFixed(3)+
+      ' (farthest cluster center was '+Math.round(ri.maxBefore)+' units from the Waypoint).';
+  }
+  return ' Recenter ON: '+ri.clusters+' cluster(s) already within range — no compaction needed.';
+}
+
 function doMerge(download){
   try{
-    const {root,dx,dy,total}=buildMerge();
+    const {root,dx,dy,total,recenterInfo}=buildMerge();
     if(download){
       const text='\uFEFF'+serialize(root,0);
       const blob=new Blob([text],{type:'application/octet-stream'});
@@ -313,9 +412,9 @@ function doMerge(download){
       a.download='merged_'+(state.tgtName.replace(/\.[^.]+$/,'')||'hideout')+'.hideout';
       a.click(); URL.revokeObjectURL(a.href);
     }
-    setStatus('ok','Merged <b>'+total+'</b> doodads. Translation applied to imported pieces: '+
+    setStatus('ok','Merged <b>'+total+'</b> doodads. Base translation: '+
       '<code>dx='+dx+', dy='+dy+'</code>. Target Waypoint kept fixed at ('+state.tgt.wpx+', '+state.tgt.wpy+').'+
-      (download?' File downloaded.':''));
+      recenterMsg(recenterInfo)+(download?' File downloaded.':''));
     return true;
   }catch(e){
     setStatus('err','Merge failed: '+e.message); return false;
@@ -323,25 +422,25 @@ function doMerge(download){
 }
 
 function doPreview(){
-  if(!doMerge(false)) return;
-  const src=state.src, tgt=state.tgt;
-  const dx=tgt.wpx-src.wpx, dy=tgt.wpy-src.wpy;
-  let rows='';
-  let n=0;
-  for(const [name,attr] of src.doodads.members){
-    if(n>=40) break; n++;
-    const ox=numVal(attr,'x'), oy=numVal(attr,'y');
-    const isWP = name==='Waypoint';
-    const nx = isWP? tgt.wpx : ox+dx;
-    const ny = isWP? tgt.wpy : oy+dy;
-    const relx = nx - tgt.wpx, rely = ny - tgt.wpy;
+  // Build the real output so the preview reflects recentering exactly.
+  let res; try{ res=buildMerge(); }catch(e){ setStatus('err','Preview failed: '+e.message); return; }
+  const tgt=state.tgt;
+  // Map output doodads (skip the target's own kept doodads if append mode)
+  const outMembers = getMember(res.root,'doodads').members;
+  let rows='', n=0, shown=0;
+  for(const [name,attr] of outMembers){
+    const hm = attr && attr.t==='obj' ? getMember(attr,'hash') : null;
+    const isWP = hm && Number(hm.v)===WAYPOINT_HASH;
+    const nx=numVal(attr,'x'), ny=numVal(attr,'y');
+    const relx=nx-tgt.wpx, rely=ny-tgt.wpy;
+    n++; if(n>40) continue; shown++;
     rows+='<tr><td>'+name+(isWP?' <span class="pill">fixed</span>':'')+'</td>'+
-      '<td class="num">'+ox+', '+oy+'</td>'+
       '<td class="num">'+nx+', '+ny+'</td>'+
       '<td class="num">'+(relx>=0?'+':'')+relx+', '+(rely>=0?'+':'')+rely+'</td></tr>';
   }
-  previewBody.innerHTML='<table><tr><th>Doodad</th><th>Source x,y</th><th>New x,y</th><th>Offset from Waypoint</th></tr>'+rows+'</table>'+
-    (src.doodads.members.length>40? '<p class="desc">…and '+(src.doodads.members.length-40)+' more.</p>':'');
+  previewBody.innerHTML='<table><tr><th>Doodad</th><th>New x,y</th><th>Offset from Waypoint</th></tr>'+rows+'</table>'+
+    (n>40? '<p class="desc">…and '+(n-40)+' more.</p>':'');
+  setStatus('info','Preview of final placement.'+recenterMsg(res.recenterInfo));
   previewWrap.style.display='block'; previewWrap.open=true;
 }
 
@@ -350,6 +449,7 @@ fileSrc.addEventListener('change',e=>{ if(e.target.files[0]) readFile(e.target.f
 fileTgt.addEventListener('change',e=>{ if(e.target.files[0]) readFile(e.target.files[0],'tgt'); });
 goBtn.addEventListener('click',()=>doMerge(true));
 previewBtn.addEventListener('click',doPreview);
+recenter.addEventListener('change',()=>{ document.getElementById('radiusRow').style.display = recenter.checked?'flex':'none'; });
 
 // drag & drop
 [['dropSrc','src'],['dropTgt','tgt']].forEach(([id,which])=>{
@@ -359,5 +459,4 @@ previewBtn.addEventListener('click',doPreview);
   el.addEventListener('drop',e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0],which); });
 });
 </script>
-</body>
 </html>
