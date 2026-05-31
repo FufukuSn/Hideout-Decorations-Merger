@@ -9,8 +9,8 @@ Open the HTML file in any modern browser (tested chromium, firefox, Internet exp
 
 ## Screenshots
 
-https://i.imgur.com/cGo7Qe8.jpeg
-https://i.imgur.com/yed389v.jpeg
+!https://i.imgur.com/cGo7Qe8.jpeg
+!https://i.imgur.com/yed389v.jpeg
 
 ## How to use
 
