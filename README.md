@@ -1,22 +1,24 @@
 ## Hideout Decorations Merger 
 https://fufukusn.github.io/Hideout-Decorations-Merger/
 
-A single-file, browser-based tool for **Path of Exile** hideout files (`.hideout`). It imports every doodad from one layout into another, re-anchoring all imported pieces to the target layout's **Waypoint** — so they keep their exact position relative to the Waypoint even though the Waypoint itself sits somewhere different in the new hideout for your ~~gooning~~ pleasure. 
+A single-file, browser-based tool for **Path of Exile** hideout files (`.hideout`). It imports every decoration from one layout into another, re-anchoring all imported pieces to the target layout's **Waypoint** — so they keep their exact position relative to the Waypoint even though the Waypoint itself sits somewhere different in the new hideout for your ~~gooning~~ pleasure. 
 
-Open the HTML file in any modern browser (tested chromium, firefox, Internet explorer) and it runs entirely on your machine — **nothing is uploaded**.
+Open the HTML file in any modern browser (tested chromium, firefox, Internet explorer) **nothing is uploaded**, you may need to allow for JS script to run if forbidden.
 
 Should work with any language, tested on English, Russian and Chinese including source and target files. The Waypoint is located by its internal hash, if that hash ever changes it should still work with English source/targets that you can manually make if you have required hideouts in game.
 
 Should techincally work on path of exile 1, even if waypoint internal hash is different, it should pick up 'Waypoint' from english loc file, but I did not test it nor want to.
 
-While the tool allows you to import any artistic composition from any eligible (`.hideout`) file, it **does not unlocks it on your account or spawns decorations you do not own.**
+While the tool allows you to import any artistic composition from any eligible (`.hideout`) file, it **does not unlock it on your account or spawns decorations or MTX you do not own.**
 
 
 
 ## Screenshots
 
 ![Screenshot 1](https://i.imgur.com/cGo7Qe8.jpeg)
+Source: https://hideoutshowcase.com/hideout/show/8848/title/2B%20Remake%20(Dreadnought) intial hideout - Dreadnought hideout
 ![Screenshot 2](https://i.imgur.com/eoNiNXg.jpeg)
+Source: https://hideoutshowcase.com/hideout/show/8874/title/deadlock%20ivy initial hideout - Canal hideout
 
 ## How to use
 
