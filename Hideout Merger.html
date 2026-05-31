@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hideout Waypoint Offset Merger</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e222d; --border:#2a2f3c;
+    --text:#e6e9ef; --muted:#9aa3b2; --accent:#c79a3a; --accent2:#7aa2ff;
+    --good:#3ecf8e; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1a1f2b,#0f1117);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;padding:28px}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:22px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .card h2{font-size:15px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .tag{font-size:11px;color:#0f1117;background:var(--accent);padding:2px 8px;border-radius:999px;font-weight:600}
+  .tag.blue{background:var(--accent2)}
+  .desc{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .drop{border:1.5px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;
+    transition:.15s;background:var(--panel2)}
+  .drop:hover{border-color:var(--accent2)}
+  .drop.has{border-style:solid;border-color:var(--accent2)}
+  .drop input{display:none}
+  .fname{font-size:13px;color:var(--text);word-break:break-all}
+  .meta{font-size:12px;color:var(--muted);margin-top:8px;text-align:left}
+  .meta b{color:var(--text)}
+  .row{display:flex;align-items:center;gap:10px;margin:20px 0 6px;flex-wrap:wrap}
+  button{font:inherit;border:none;border-radius:10px;padding:11px 20px;cursor:pointer;font-weight:600}
+  .btn{background:var(--accent);color:#0f1117}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+  .status{margin-top:14px;padding:12px 14px;border-radius:10px;font-size:13.5px;display:none}
+  .status.show{display:block}
+  .status.ok{background:rgba(62,207,142,.12);border:1px solid rgba(62,207,142,.4)}
+  .status.err{background:rgba(255,107,107,.12);border:1px solid rgba(255,107,107,.4);color:#ffb3b3}
+  .status.info{background:rgba(122,162,255,.1);border:1px solid rgba(122,162,255,.35)}
+  .opt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:10px}
+  .opt input{accent-color:var(--accent2);width:16px;height:16px}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600}
+  td.num{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .pill{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--panel2);color:var(--muted);margin-left:6px}
+  details{margin-top:12px}
+  summary{cursor:pointer;color:var(--accent2);font-size:13px}
+  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:12px}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hideout Waypoint Offset Merger</h1>
+  <p class="sub">Import every doodad from a source layout into a target layout, re-anchored to the target's Waypoint. The target Waypoint stays fixed; all imported pieces keep their exact offset from the Waypoint.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Source <span class="tag">doodads come FROM here</span></h2>
+      <p class="desc">All doodads from this file are imported (e.g. your dreadnought layout).</p>
+      <label class="drop" id="dropSrc">
+        <input type="file" id="fileSrc" accept=".hideout,.json,.txt">
+        <div class="fname" id="nameSrc">Click to choose source file</div>
+      </label>
+      <div class="meta" id="metaSrc"></div>
+    </div>
+
+    <div class="card">
+      <h2>Target <span class="tag blue">Waypoint stays FIXED</span></h2>
+      <p class="desc">Metadata and the Waypoint position from this file are kept (e.g. your apex layout).</p>
+      <label class="drop" id="dropTgt">
+        <input type="file" id="fileTgt" accept=".hideout,.json,.txt">
+        <div class="fname" id="nameTgt">Click to choose target file</div>
+      </label>
+      <div class="meta" id="metaTgt"></div>
+    </div>
+  </div>
+
+  <div class="opt">
+    <input type="checkbox" id="keepTarget">
+    <label for="keepTarget">Also keep the target file's own doodads (append source doodads instead of replacing). Target Waypoint is never duplicated.</label>
+  </div>
+
+  <div class="row">
+    <button class="btn" id="goBtn" disabled>Merge &amp; download</button>
+    <button class="btn ghost" id="previewBtn" disabled>Preview offsets</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <details id="previewWrap" style="display:none">
+    <summary>Offset preview (first 40 doodads)</summary>
+    <div id="previewBody"></div>
+  </details>
+
+  <p class="foot">Runs entirely in your browser. Nothing is uploaded. Translation = (targetWaypoint − sourceWaypoint), applied to every imported doodad's x/y. Rotation (r) and variation (fv) are preserved unchanged.</p>
+</div>
+
+<script>
+
+function parseJSONpreserve(text){
+  // strip BOM
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  let i=0;
+  function ws(){ while(i<text.length && /\s/.test(text[i])) i++; }
+  function val(){
+    ws();
+    const c=text[i];
+    if(c==='{') return obj();
+    if(c==='[') return arr();
+    if(c==='"') return {t:'str',v:str()};
+    if(c==='t'||c==='f'){ const b=text.startsWith('true',i); i+= b?4:5; return {t:'lit',v:b}; }
+    if(c==='n'){ i+=4; return {t:'lit',v:null}; }
+    return num();
+  }
+  function str(){
+    let s=''; i++; 
+    while(text[i]!=='"'){
+      if(text[i]==='\\'){ s+=text[i]+text[i+1]; i+=2; }
+      else { s+=text[i]; i++; }
+    }
+    i++; 
+    return s;
+  }
+  function num(){
+    let st=i;
+    while(i<text.length && /[-+0-9.eE]/.test(text[i])) i++;
+    return {t:'num',v:text.slice(st,i)};
+  }
+  function obj(){
+    const members=[]; i++; ws();
+    if(text[i]==='}'){ i++; return {t:'obj',members}; }
+    while(true){
+      ws(); const k=str(); ws(); i++; 
+      const v=val(); members.push([k,v]); ws();
+      if(text[i]===','){ i++; continue; }
+      if(text[i]==='}'){ i++; break; }
+      throw new Error('bad object at '+i);
+    }
+    return {t:'obj',members};
+  }
+  function arr(){
+    const items=[]; i++; ws();
+    if(text[i]===']'){ i++; return {t:'arr',items}; }
+    while(true){
+      items.push(val()); ws();
+      if(text[i]===','){ i++; continue; }
+      if(text[i]===']'){ i++; break; }
+      throw new Error('bad array at '+i);
+    }
+    return {t:'arr',items};
+  }
+  const r=val(); return r;
+}
+
+function serialize(node, indent){
+  const pad=' '.repeat(indent), pad2=' '.repeat(indent+2);
+  if(node.t==='str') return '"'+node.v+'"';
+  if(node.t==='num') return node.v;
+  if(node.t==='lit') return JSON.stringify(node.v);
+  if(node.t==='arr'){
+    if(node.items.length===0) return '[]';
+    return '[\n'+node.items.map(it=>pad2+serialize(it,indent+2)).join(',\n')+'\n'+pad+']';
+  }
+  if(node.t==='obj'){
+    if(node.members.length===0) return '{}';
+    return '{\n'+node.members.map(([k,v])=>pad2+'"'+k+'": '+serialize(v,indent+2)).join(',\n')+'\n'+pad+'}';
+  }
+}
+
+
+function getMember(objNode,key){
+  for(const [k,v] of objNode.members) if(k===key) return v;
+  return null;
+}
+function numVal(objNode,key){
+  const m=getMember(objNode,key);
+  return m? Number(m.v): undefined;
+}
+
+
+const state={src:null,tgt:null,srcName:'',tgtName:''};
+
+function findWaypoint(doodadsObj){
+  // doodadsObj is t:'obj' with members [name, attrObj]; find member whose key is "Waypoint"
+  for(const [k,v] of doodadsObj.members){
+    if(k==='Waypoint') return v;
+  }
+  return null;
+}
+
+function analyze(ast){
+  if(!ast || ast.t!=='obj') throw new Error('Not a JSON object');
+  const doodads=getMember(ast,'doodads');
+  if(!doodads || doodads.t!=='obj') throw new Error('No "doodads" object found');
+  const wp=findWaypoint(doodads);
+  if(!wp) throw new Error('No "Waypoint" doodad found');
+  const name=getMember(ast,'hideout_name');
+  return {
+    ast, doodads, wp,
+    count:doodads.members.length,
+    wpx:numVal(wp,'x'), wpy:numVal(wp,'y'),
+    hideoutName: name? name.v : '(unnamed)'
+  };
+}
+
+function showMeta(el,info){
+  el.innerHTML='<b>'+info.count+'</b> doodads &middot; "'+info.hideoutName+'"<br>'+
+    'Waypoint at <b>('+info.wpx+', '+info.wpy+')</b>';
+}
+
+function readFile(file, which){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const ast=parseJSONpreserve(reader.result);
+      const info=analyze(ast);
+      state[which]=info; state[which+'Name']=file.name;
+      if(which==='src'){ nameSrc.textContent=file.name; dropSrc.classList.add('has'); showMeta(metaSrc,info); }
+      else { nameTgt.textContent=file.name; dropTgt.classList.add('has'); showMeta(metaTgt,info); }
+      setStatus('','');
+    }catch(e){
+      setStatus('err','Could not parse '+file.name+': '+e.message);
+      state[which]=null;
+    }
+    refreshButtons();
+  };
+  reader.readAsText(file);
+}
+
+function buildMerge(){
+  const src=state.src, tgt=state.tgt;
+  const dx = tgt.wpx - src.wpx;
+  const dy = tgt.wpy - src.wpy;
+
+  // Build new doodads object node
+  const out={t:'obj',members:[]};
+
+  if(keepTarget.checked){
+    // start with target's own doodads (these keep their original coords)
+    for(const [name,attr] of tgt.doodads.members){
+      out.members.push([name, attr]); // verbatim
+    }
+  }
+
+  // import source doodads, re-anchored
+  for(const [name,attr] of src.doodads.members){
+    if(name==='Waypoint'){
+      if(keepTarget.checked){
+        // target Waypoint already present; skip source waypoint
+        continue;
+      } else {
+        // use target's waypoint verbatim so it stays fixed
+        out.members.push([name, tgt.wp]);
+        continue;
+      }
+    }
+    // clone attr object, offset x/y
+    const newAttr={t:'obj',members:attr.members.map(([k,v])=>{
+      if(k==='x') return [k,{t:'num',v:String(Number(v.v)+dx)}];
+      if(k==='y') return [k,{t:'num',v:String(Number(v.v)+dy)}];
+      return [k,v];
+    })};
+    out.members.push([name,newAttr]);
+  }
+
+  // Build full output from TARGET metadata, replacing doodads
+  const root={t:'obj',members: tgt.ast.members.map(([k,v])=> k==='doodads'? [k,out] : [k,v])};
+  return {root,dx,dy,total:out.members.length};
+}
+
+function setStatus(kind,msg){
+  if(!msg){ status.className='status'; status.innerHTML=''; return; }
+  status.className='status show '+kind; status.innerHTML=msg;
+}
+
+function refreshButtons(){
+  const ready = state.src && state.tgt;
+  goBtn.disabled=!ready; previewBtn.disabled=!ready;
+}
+
+function doMerge(download){
+  try{
+    const {root,dx,dy,total}=buildMerge();
+    if(download){
+      const text='\uFEFF'+serialize(root,0);
+      const blob=new Blob([text],{type:'application/octet-stream'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='merged_'+(state.tgtName.replace(/\.[^.]+$/,'')||'hideout')+'.hideout';
+      a.click(); URL.revokeObjectURL(a.href);
+    }
+    setStatus('ok','Merged <b>'+total+'</b> doodads. Translation applied to imported pieces: '+
+      '<code>dx='+dx+', dy='+dy+'</code>. Target Waypoint kept fixed at ('+state.tgt.wpx+', '+state.tgt.wpy+').'+
+      (download?' File downloaded.':''));
+    return true;
+  }catch(e){
+    setStatus('err','Merge failed: '+e.message); return false;
+  }
+}
+
+function doPreview(){
+  if(!doMerge(false)) return;
+  const src=state.src, tgt=state.tgt;
+  const dx=tgt.wpx-src.wpx, dy=tgt.wpy-src.wpy;
+  let rows='';
+  let n=0;
+  for(const [name,attr] of src.doodads.members){
+    if(n>=40) break; n++;
+    const ox=numVal(attr,'x'), oy=numVal(attr,'y');
+    const isWP = name==='Waypoint';
+    const nx = isWP? tgt.wpx : ox+dx;
+    const ny = isWP? tgt.wpy : oy+dy;
+    const relx = nx - tgt.wpx, rely = ny - tgt.wpy;
+    rows+='<tr><td>'+name+(isWP?' <span class="pill">fixed</span>':'')+'</td>'+
+      '<td class="num">'+ox+', '+oy+'</td>'+
+      '<td class="num">'+nx+', '+ny+'</td>'+
+      '<td class="num">'+(relx>=0?'+':'')+relx+', '+(rely>=0?'+':'')+rely+'</td></tr>';
+  }
+  previewBody.innerHTML='<table><tr><th>Doodad</th><th>Source x,y</th><th>New x,y</th><th>Offset from Waypoint</th></tr>'+rows+'</table>'+
+    (src.doodads.members.length>40? '<p class="desc">…and '+(src.doodads.members.length-40)+' more.</p>':'');
+  previewWrap.style.display='block'; previewWrap.open=true;
+}
+
+/* wiring */
+fileSrc.addEventListener('change',e=>{ if(e.target.files[0]) readFile(e.target.files[0],'src'); });
+fileTgt.addEventListener('change',e=>{ if(e.target.files[0]) readFile(e.target.files[0],'tgt'); });
+goBtn.addEventListener('click',()=>doMerge(true));
+previewBtn.addEventListener('click',doPreview);
+
+// drag & drop
+[['dropSrc','src'],['dropTgt','tgt']].forEach(([id,which])=>{
+  const el=document.getElementById(id);
+  el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('has');});
+  el.addEventListener('dragleave',()=>{ if(!state[which]) el.classList.remove('has'); });
+  el.addEventListener('drop',e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0],which); });
+});
+</script>
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  // why I'm even publishing this
+  
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like localhost we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+  
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
