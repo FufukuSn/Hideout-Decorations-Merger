@@ -22,20 +22,6 @@ Source: https://hideoutshowcase.com/hideout/show/8874/title/deadlock%20ivy initi
 
 ## How to use
 
-- **Two file selectors** (click or drag-and-drop) — a **source** and a **target**.
-- **Waypoint-anchored offset** — imported doodads keep their exact offset from the Waypoint; the target Waypoint stays fixed.
-- **Preserves rotation & variation** — each doodad's `r` (rotation) and `fv` (variation/flags) are carried over unchanged.
-- **Language-independent** — Waypoint found by hash, so non-English hideout files (Russian, Chinese, etc.) work out of the box.
-- **Two merge modes:**
-  - **Replace** (default) — the target's doodads are replaced by the re-anchored source set.
-  - **Append** — keep the target's own doodads and add the source set on top.
-- **Cluster recentering** (optional) — pull far-away decoration groups back toward the Waypoint so they stay inside the in-game placement bounds, without distorting the groups themselves.
-- **Offset preview** — inspect the first 40 doodads (source x/y → new x/y → offset from Waypoint) before downloading.
-
-
-
-## Usage
-
 1. Open `index.html` in a browser (or visit the hosted version).
 2. **Source** — choose the file whose doodads you want to import (e.g. your dreadnought layout). *All* decorations come from here.
 3. **Target** — choose the file whose Waypoint and metadata stay fixed (e.g. your apex layout).
