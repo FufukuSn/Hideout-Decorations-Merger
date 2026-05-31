@@ -130,9 +130,9 @@
 </div>
 
 <script>
-
+  
+    // strip BOM
 function parseJSONpreserve(text){
-  // strip BOM
   if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
   let i=0;
   function ws(){ while(i<text.length && /\s/.test(text[i])) i++; }
@@ -213,10 +213,10 @@ function numVal(objNode,key){
 
 
 const state={src:null,tgt:null,srcName:'',tgtName:''};
+  
+// so matching "Waypoint" breaks on non-EN files. fall back to the name just in case
+// The Waypoint always has this hash regardless of game language, hope it doesnt change with patch lul
 
-// The Waypoint always has this hash regardless of game language, so we match by
-// hash first (works for "Waypoint", "\u041f\u043e\u0440\u0442\u0430\u043b", etc.).
-// Fall back to the English name only if the hash isn't present.
 const WAYPOINT_HASH = 1224707366;
 function findWaypoint(doodadsObj){
   for(const [k,v] of doodadsObj.members){
@@ -270,12 +270,10 @@ function readFile(file, which){
   reader.readAsText(file);
 }
 
-// ----- Cluster detection -----
-// Two doodads are "linked" if they're within CLUSTER_DIST of each other (per
-// Chebyshev distance). Linked doodads form one rigid artistic group.
+// group nearby doodads (<=5 units apart on both axes) into clusters via union-find.
+// each cluster = one decoration that should move together.
 const CLUSTER_DIST = 5;
 function detectClusters(items){
-  // items: [{x,y, idx}]; returns array of clusters, each an array of item indices
   const n=items.length;
   const parent=Array.from({length:n},(_,i)=>i);
   const find=a=>{ while(parent[a]!==a){ parent[a]=parent[parent[a]]; a=parent[a]; } return a; };
@@ -291,25 +289,24 @@ function detectClusters(items){
 
 function buildMerge(){
   const src=state.src, tgt=state.tgt;
-  const dx = tgt.wpx - src.wpx;   // base Waypoint-pinned translation
+  const dx = tgt.wpx - src.wpx;   
   const dy = tgt.wpy - src.wpy;
 
   const out={t:'obj',members:[]};
 
   if(keepTarget.checked){
     for(const [name,attr] of tgt.doodads.members){
-      out.members.push([name, attr]); // target's own doodads kept verbatim
+      out.members.push([name, attr]); 
     }
   }
 
-  // Target Waypoint name (output stays in target's language)
   let tgtWpName='Waypoint';
   for(const [k,v] of tgt.doodads.members){
     if(v && v.t==='obj'){ const h=getMember(v,'hash'); if(h && Number(h.v)===WAYPOINT_HASH){ tgtWpName=k; break; } }
   }
 
-  // Collect importable source doodads (everything except the Waypoint)
-  const imp=[]; // {name, attr, x, y}
+
+  const imp=[]; 
   let srcWaypointSeen=false;
   for(const [name,attr] of src.doodads.members){
     const hm = attr && attr.t==='obj' ? getMember(attr,'hash') : null;
@@ -317,7 +314,7 @@ function buildMerge(){
     imp.push({name, attr, x:numVal(attr,'x'), y:numVal(attr,'y')});
   }
 
-  // Per-doodad extra translation from recentering (default 0,0 => current behavior)
+
   const extra = imp.map(()=>({ex:0, ey:0}));
   let recenterInfo = {applied:false, scale:1, clusters:imp.length?1:0, maxBefore:0};
 
@@ -326,7 +323,6 @@ function buildMerge(){
     const clusters = detectClusters(imp);
     recenterInfo.clusters = clusters.length;
 
-    // Each cluster's center, and its vector from the SOURCE waypoint.
     const centers = clusters.map(idxs=>{
       let minx=Infinity,maxx=-Infinity,miny=Infinity,maxy=-Infinity;
       for(const i of idxs){ const it=imp[i];
@@ -334,36 +330,32 @@ function buildMerge(){
         if(it.y<miny)miny=it.y; if(it.y>maxy)maxy=it.y; }
       return {cx:(minx+maxx)/2, cy:(miny+maxy)/2};
     });
-    // Cluster-center vectors from source waypoint
     const vecs = centers.map(c=>({vx:c.cx-src.wpx, vy:c.cy-src.wpy}));
     const maxV = Math.max(0, ...vecs.map(v=>Math.max(Math.abs(v.vx),Math.abs(v.vy))));
     recenterInfo.maxBefore = maxV;
 
-    // Only compact if the farthest cluster center exceeds the safe radius.
+   
     const scale = (maxV>maxDist) ? (maxDist/maxV) : 1;
     recenterInfo.scale = scale;
     recenterInfo.applied = scale<1;
 
-    // For each cluster, move its CENTER to scaled position; doodads keep their
-    // exact offset to the cluster center (rigid => internal geometry preserved).
+    // move each cluster's center inward, but keep the doodads' offsets to it
+    // so the group itself doesn't get distorted
     clusters.forEach((idxs, ci)=>{
       const v=vecs[ci];
-      // new center offset from source waypoint after scaling
       const ncx = src.wpx + v.vx*scale;
       const ncy = src.wpy + v.vy*scale;
-      // shift = (scaled center) - (original center)
       const shx = ncx - centers[ci].cx;
       const shy = ncy - centers[ci].cy;
       for(const i of idxs){ extra[i].ex = shx; extra[i].ey = shy; }
     });
   }
 
-  // Place the (fixed) target Waypoint, preserving source order position
   if(!keepTarget.checked && srcWaypointSeen){
     out.members.push([tgtWpName, tgt.wp]);
   }
 
-  // Emit imported doodads with base translation + recenter extra
+  // Emit imported doodads with base translation + recenter
   imp.forEach((it,i)=>{
     const tx = dx + extra[i].ex;
     const ty = dy + extra[i].ey;
@@ -420,12 +412,10 @@ function doMerge(download){
     setStatus('err','Merge failed: '+e.message); return false;
   }
 }
-
+  // run the actual merge so the preview matches
 function doPreview(){
-  // Build the real output so the preview reflects recentering exactly.
   let res; try{ res=buildMerge(); }catch(e){ setStatus('err','Preview failed: '+e.message); return; }
   const tgt=state.tgt;
-  // Map output doodads (skip the target's own kept doodads if append mode)
   const outMembers = getMember(res.root,'doodads').members;
   let rows='', n=0, shown=0;
   for(const [name,attr] of outMembers){
