@@ -358,4 +358,6 @@ previewBtn.addEventListener('click',doPreview);
   el.addEventListener('dragleave',()=>{ if(!state[which]) el.classList.remove('has'); });
   el.addEventListener('drop',e=>{ e.preventDefault(); if(e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0],which); });
 });
+</script>
+</body>
 </html>
