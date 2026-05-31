@@ -1,15 +1,16 @@
 ## Hideout Decorations Merger 
 https://fufukusn.github.io/Hideout-Decorations-Merger/
 
-A single-file, browser-based tool for **Path of Exile** hideout files (`.hideout`). It imports every doodad from one layout into another, re-anchoring all imported pieces to the target layout's **Waypoint** — so they keep their exact position relative to the Waypoint even though the Waypoint itself sits somewhere different in the new hideout for your gooning pleasure.
+A single-file, browser-based tool for **Path of Exile** hideout files (`.hideout`). It imports every doodad from one layout into another, re-anchoring all imported pieces to the target layout's **Waypoint** — so they keep their exact position relative to the Waypoint even though the Waypoint itself sits somewhere different in the new hideout for your ~~gooning~~ pleasure. 
 
 Open the HTML file in any modern browser (tested chromium, firefox, Internet explorer) and it runs entirely on your machine — **nothing is uploaded**.
 
----
+
 
 ## Screenshots
 
-
+https://i.imgur.com/cGo7Qe8.jpeg
+https://i.imgur.com/yed389v.jpeg
 
 ## How to use
 
@@ -59,26 +60,6 @@ The Waypoint itself is written from the **target** file verbatim.
 ```
 
 Only `x` and `y` are modified on import. `hash`, `r`, and `fv` are preserved.
-
-
-
-## File format notes
-
-`.hideout` files are UTF-8 (with BOM) JSON. The top level looks like:
-
-```json
-{
-  "version": 1,
-  "language": "English",
-  "hideout_name": "Overgrown Apex Hideout",
-  "hideout_hash": 31541,
-  "doodads": { ... }
-}
-```
-
-The `doodads` object may legitimately contain **repeated keys** for decorations placed multiple times. This tool is built specifically to handle that.
-
-
 
 
 ## License
